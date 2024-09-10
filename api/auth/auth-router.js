@@ -1,7 +1,38 @@
 const router = require('express').Router();
+const bcrypt = require('bcryptjs')
+const User = require('./auth-model')
+const jwt = require('jsonwebtoken')
 
-router.post('/register', (req, res) => {
-  res.end('implement register, please!');
+router.post('/register', async (req, res,next) => {
+  try{
+    const {username,password} = req.body
+    if(!username || !password){
+      return res.status(400).json({message: "username and password required"})
+    }
+    try{
+      const existingUser = await User.findBy(username)
+      if(existingUser){
+        res.status(409).json({message: "username taken"})
+      }
+    }catch(error){
+      next(error)
+    }
+    const hash = bcrypt.hashSync(password,8)
+    const newUser = {username,password:hash}
+    console.log(newUser,'newuser')
+    
+    const createdUser = await User.addUser(newUser)
+    console.log(createdUser,'created user')
+
+
+    res.status(201).json({
+      id:createdUser.id,
+      username:createdUser.username,
+      password: createdUser.password
+    })
+  }catch(err){
+    next(err)
+  }
   /*
     IMPLEMENT
     You are welcome to build additional middlewares to help with the endpoint's functionality.
@@ -29,8 +60,29 @@ router.post('/register', (req, res) => {
   */
 });
 
-router.post('/login', (req, res) => {
-  res.end('implement login, please!');
+router.post('/login', async (req, res,next) => {
+  try{
+    const {username,password} = req.body
+    if(!username || !password){
+      return res.status(400).json({message:"username and password required"})
+    }
+    const user = await User.findBy(username)
+  
+
+
+     if(user && bcrypt.compareSync(password,user.password)){
+      const token = generateToken(user)
+      req.session.user = user
+      res.json({
+        message: `welcome, ${username}`,
+        token: token
+      })
+    }else {
+      return res.status(401).json({message:'invalid credentials'})
+    }
+  }catch (err){
+    next(err)
+  }
   /*
     IMPLEMENT
     You are welcome to build additional middlewares to help with the endpoint's functionality.
@@ -56,4 +108,17 @@ router.post('/login', (req, res) => {
   */
 });
 
+function generateToken(user){
+  const payload = {
+    userId: user.id,
+    username: user.username
+  }
+  const secret = 'secret';
+  const options = {
+    expiresIn: '1d'
+  }
+  return jwt.sign(payload,secret,options)
+}
+
 module.exports = router;
+

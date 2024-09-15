@@ -1,28 +1,21 @@
 const jwt = require('jsonwebtoken')
 
-
-const JWT_SECRET = 'mysecretkey'
-
-
-
 module.exports = (req, res, next) => {
-  //if no token is found in header.token respond with "token required"
-  const token = req.headers.authorization
-
-  if(!token) {
-    res.status(400).json({message: "token required"})
+  console.log(req.headers)
+  const token = req.headers.authorization;
+  if (!token) {
+    res.status(422).json({message: "token required"})
+  } else {
+    jwt.verify(req.headers.authorization, 'shh', (err, decodedToken) => {
+      if (err) {
+        res.status(401).json({message: 'token invalid'})
+      } else {
+        req.decoded = decodedToken
+        next()
+      }
+    })
   }
 
-  jwt.verify(token, JWT_SECRET, (err, decodedToken) => {
-    if (err) {
-      res.status(401).json({message: "token invalid" })
-    } else {
-      req.decodedToken = decodedToken
-      next()
-    }
-  })
-  //else if invalid or expired token resond with "token invalid"
-  //else respond with next(
   /*
     IMPLEMENT
 

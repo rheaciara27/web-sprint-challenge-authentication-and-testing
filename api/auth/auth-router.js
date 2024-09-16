@@ -1,15 +1,38 @@
 const router = require('express').Router();
-const Users = require('../users/user-model');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const validateCred = require('../middleware/validateCred');
-const uniqueName = require('../middleware/uniqueName');
-const invalidCred = require('../middleware/invalidCred');
-const jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret';
+const bcrypt = require('bcryptjs')
+const User = require('./auth-model')
+const jwt = require('jsonwebtoken')
 
-require('dotenv').config();
+router.post('/register', async (req, res,next) => {
+  try{
+    const {username,password} = req.body
+    if(!username || !password){
+      return res.status(400).json({message: "username and password required"})
+    }
+    try{
+      const existingUser = await User.findBy(username)
+      if(existingUser){
+        res.status(409).json({message: "username taken"})
+      }
+    }catch(error){
+      next(error)
+    }
+    const hash = bcrypt.hashSync(password,8)
+    const newUser = {username,password:hash}
+    console.log(newUser,'newuser')
+    
+    const createdUser = await User.addUser(newUser)
+    console.log(createdUser,'created user')
 
-router.post('/register', validateCred, uniqueName, async (req, res) => {
+
+    res.status(201).json({
+      id:createdUser.id,
+      username:createdUser.username,
+      password: createdUser.password
+    })
+  }catch(err){
+    next(err)
+  }
   /*
     IMPLEMENT
     You are welcome to build additional middlewares to help with the endpoint's functionality.
@@ -35,22 +58,32 @@ router.post('/register', validateCred, uniqueName, async (req, res) => {
     4- On FAILED registration due to the `username` being taken,
       the response body should include a string exactly as follows: "username taken".
   */
-    const {username, password} = req.body;
-
-    // const existingUser = await Users.findBy({username}).first();
-    // if(existingUser){
-    //     res.status(401).json({message: "username taken"})
-    // } else {
-        const hash = bcrypt.hashSync(password, 8);
-        const user = await Users.add({username, password: hash});
-        res.status(201).json(user);
-    //}
-
-
 });
 
-router.post('/login', validateCred, invalidCred, async (req, res) => {
-    /*
+router.post('/login', async (req, res,next) => {
+  try{
+    const {username,password} = req.body
+    if(!username || !password){
+      return res.status(400).json({message:"username and password required"})
+    }
+    const user = await User.findBy(username)
+  
+
+
+     if(user && bcrypt.compareSync(password,user.password)){
+      const token = generateToken(user)
+      req.session.user = user
+      res.json({
+        message: `welcome, ${username}`,
+        token: token
+      })
+    }else {
+      return res.status(401).json({message:'invalid credentials'})
+    }
+  }catch (err){
+    next(err)
+  }
+  /*
     IMPLEMENT
     You are welcome to build additional middlewares to help with the endpoint's functionality.
 
@@ -73,37 +106,18 @@ router.post('/login', validateCred, invalidCred, async (req, res) => {
     4- On FAILED login due to `username` not existing in the db, or `password` being incorrect,
       the response body should include a string exactly as follows: "invalid credentials".
   */
-      const { username } = req.body;
-
-      try {
-        // Find user by username
-        const user = await Users.findBy({ username }).first();
-
-        // Generate JWT token
-        const token = generateToken(user);
-
-        // Return success message and token
-        res.status(200).json({
-          message: `Welcome, ${user.username}`,
-          token
-        });
-      } catch (error) {
-        console.error("Error occurred during login:", error);
-        res.status(500).json({ message: "Server error while logging in" });
-      }
-
-
 });
 
-function generateToken(user) {
+function generateToken(user){
   const payload = {
-    subject: user.id,
-    username: user.username,
-  };
+    userId: user.id,
+    username: user.username
+  }
+  const secret = 'secret';
   const options = {
-    expiresIn: '1d',
-  };
-  return jwt.sign(payload, jwtSecret, options);
+    expiresIn: '1d'
+  }
+  return jwt.sign(payload,secret,options)
 }
 
 module.exports = router;

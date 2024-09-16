@@ -1,27 +1,15 @@
-const Users = require('../jokes/jokes-model')
 const router = require('express').Router();
-const bcrypt = require("bcryptjs");
-const jwt = require('jsonwebtoken')
-const JWT_SECRET = require('../middleware/config/config')//eslint-disable-line
-const {check, checkUsername, checkCred} = require('./auth-middlware')
+const Users = require('../users/user-model');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const validateCred = require('../middleware/validateCred');
+const uniqueName = require('../middleware/uniqueName');
+const invalidCred = require('../middleware/invalidCred');
+const jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret';
 
+require('dotenv').config();
 
-router.post('/register',check, checkUsername, async (req, res) => {
-  try {
-    let user = req.body;
-    const hash = bcrypt.hashSync(user.password, 8) 
-    user.password = hash
-    const newUser = await Users.add({username: user.username, password: user.password})
-    res.status(200).json(newUser)
-  } catch (err) {
-    res.status(401).json({message: 'username and password required'})
-  }
-}
-)
-  
-
-  
-  
+router.post('/register', validateCred, uniqueName, async (req, res) => {
   /*
     IMPLEMENT
     You are welcome to build additional middlewares to help with the endpoint's functionality.
@@ -47,27 +35,22 @@ router.post('/register',check, checkUsername, async (req, res) => {
     4- On FAILED registration due to the `username` being taken,
       the response body should include a string exactly as follows: "username taken".
   */
-router.post('/login',check, checkCred, async (req, res) => {
-  try {
-        const {username, password} = req.body;
-        const user = await Users.getBy(username)
-     if (user && bcrypt.compareSync(password, user.password)) {
-       const token = buildToken(user)
-       res.status(200).json({message: `welcome, ${username}`, token: token, })
-      } else {
-        res.status(401).json({message: "invalid credentials"})
-        }
-  } catch (err) {
-    res.status(401).json({message: err.message ||'invalid credentials'})
-  }
-  
-  
-  
-  
-  
-  
-  
-  /*
+    const {username, password} = req.body;
+
+    // const existingUser = await Users.findBy({username}).first();
+    // if(existingUser){
+    //     res.status(401).json({message: "username taken"})
+    // } else {
+        const hash = bcrypt.hashSync(password, 8);
+        const user = await Users.add({username, password: hash});
+        res.status(201).json(user);
+    //}
+
+
+});
+
+router.post('/login', validateCred, invalidCred, async (req, res) => {
+    /*
     IMPLEMENT
     You are welcome to build additional middlewares to help with the endpoint's functionality.
 
@@ -90,24 +73,37 @@ router.post('/login',check, checkCred, async (req, res) => {
     4- On FAILED login due to `username` not existing in the db, or `password` being incorrect,
       the response body should include a string exactly as follows: "invalid credentials".
   */
+      const { username } = req.body;
+
+      try {
+        // Find user by username
+        const user = await Users.findBy({ username }).first();
+
+        // Generate JWT token
+        const token = generateToken(user);
+
+        // Return success message and token
+        res.status(200).json({
+          message: `Welcome, ${user.username}`,
+          token
+        });
+      } catch (error) {
+        console.error("Error occurred during login:", error);
+        res.status(500).json({ message: "Server error while logging in" });
+      }
+
+
 });
 
-
-function buildToken(user) {
+function generateToken(user) {
   const payload = {
     subject: user.id,
-    username: user.username
-  }
+    username: user.username,
+  };
   const options = {
-    expiresIn: "1d"
-  }
-  return jwt.sign(payload, 'shh', options) 
+    expiresIn: '1d',
+  };
+  return jwt.sign(payload, jwtSecret, options);
 }
-
-router.use((error, req, res, next) => {//eslint-disable-line
-  res.status(500).json({message: error.message || "something went wrong"})
-})
-
-
 
 module.exports = router;

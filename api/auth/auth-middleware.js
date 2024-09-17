@@ -1,40 +1,51 @@
-const db = require("../../data/dbConfig");
+const db = require('../../data/dbConfig.js')
 
-
-const validatePost = async (req,res,next) => {
-    try {
-        const {username,password} = req.body;
-        if (!username || !password) {
-            next({status : 422, message : "username and password required"})
+const validateRegister = async (req, res, next) => {
+    try{
+        const { username, password } = req.body
+        if(
+            !username || !password ||
+            typeof username != 'string' || typeof password != 'string' ||
+            !username.trim() || !password.trim()
+        ){
+            res.status(500).json({
+                message: "username and password required"
+            })
         } else {
-            const validateUniqueness = await db("users").where("username",username).first();
-            if (validateUniqueness) {
-                next({status : 400, message : "username taken"})
-            } else {
-                next();
-            }
+            req.username = username
+            req.password = password
+            db('users')
+                .where('username', username)
+                .then(userFound => {
+                    !userFound.length? next(): res.status(400).json({
+                        message: 'username taken'
+                    })
+                })
         }
-    } catch(err) {next(err)}
+    }catch(err){
+        next(err)
+    }
+
 }
 
-const validateLogin = async (req,res,next) => {
-    try {
-        const {username,password} = req.body;
-        if (!username || !password) {
-            next({status : 422, message : "username and password required"})
-        } else {
-            const foundUser = await db("users").where("username",username).first();
-            if (!foundUser) {
-                next({status : 401, message : "invalid credentials"})
-            } else {
-                req.foundUser = foundUser;
-                next();
-            }
+const validateLogin = async (req, res, next) => {
+    try{
+        const { username, password } = req.body
+        if(!username || !password){
+            res.status(404).json({
+                message: 'username and password required'
+            })
+        }else{
+            req.username = username
+            req.password = password
+            next()
         }
-    } catch (err) {next(err)}
+    }catch(err){
+        next(err)
+    }
 }
-
-module.exports = {
-    validatePost,
+  
+  module.exports = {
+    validateRegister,
     validateLogin
-}
+  };

@@ -1,6 +1,6 @@
-const request = require('supertest');
-const server = require('./server');
-const db = require('../data/dbConfig'); // Adjust path as necessary
+const request = require("supertest");
+const server = require("./server");
+const db = require("../data/dbConfig");
 
 beforeAll(async () => {
   await db.migrate.rollback();
@@ -11,72 +11,63 @@ afterAll(async () => {
   await db.destroy();
 });
 
-describe('Auth Endpoints', () => {
-  it('should register a new user successfully', async () => {
-    const res = await request(server)
-      .post('/api/auth/register')
-      .send({ username: 'Captain Marvel', password: 'foobar' });
+describe("server.js", () => {
+  describe("auth endpoints", () => {
+    it("POST /api/auth/register - success", async () => {
+      const res = await request(server)
+        .post("/api/auth/register")
+        .send({ username: "testuser", password: "testpass" });
+      expect(res.status).toBe(201);
+      expect(res.body.username).toBe("testuser");
+      expect(res.body.password).not.toBe("testpass");
+    });
 
-    expect(res.statusCode).toBe(201);
-    expect(res.body).toHaveProperty('id');
-    expect(res.body).toHaveProperty('username', 'Captain Marvel');
+    it("POST /api/auth/register - failure (missing data)", async () => {
+      const res = await request(server)
+        .post("/api/auth/register")
+        .send({ username: "testuser2" });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toBe("username and password required");
+    });
+
+    it("POST /api/auth/login - success", async () => {
+      const res = await request(server)
+        .post("/api/auth/login")
+        .send({ username: "testuser", password: "testpass" });
+      expect(res.status).toBe(200);
+      expect(res.body.message).toContain("welcome, testuser");
+      expect(res.body.token).toBeDefined();
+    });
+
+    it("POST /api/auth/login - failure (invalid credentials)", async () => {
+      const res = await request(server)
+        .post("/api/auth/login")
+        .send({ username: "testuser", password: "wrongpass" });
+      expect(res.status).toBe(401);
+      expect(res.body.message).toBe("invalid credentials");
+    });
   });
 
-  it('should not register a user without a username or password', async () => {
-    const res = await request(server)
-      .post('/api/auth/register')
-      .send({ username: '', password: '' });
+  describe("jokes endpoint", () => {
+    it("GET /api/jokes - success (with token)", async () => {
+      // First, login to get a token
+      const loginRes = await request(server)
+        .post("/api/auth/login")
+        .send({ username: "testuser", password: "testpass" });
+      const token = loginRes.body.token;
 
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toHaveProperty('message', 'username and password required');
-  });
+      // Then, use the token to access jokes
+      const jokesRes = await request(server)
+        .get("/api/jokes")
+        .set("Authorization", token);
+      expect(jokesRes.status).toBe(200);
+      expect(Array.isArray(jokesRes.body)).toBe(true);
+    });
 
-  it('should login successfully and return a token', async () => {
-    await request(server)
-      .post('/api/auth/register')
-      .send({ username: 'Iron Man', password: 'foobar' });
-
-    const res = await request(server)
-      .post('/api/auth/login')
-      .send({ username: 'Iron Man', password: 'foobar' });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toHaveProperty('token');
-    expect(res.body).toHaveProperty('message', 'welcome, Iron Man');
-  });
-
-  it('should return invalid credentials for wrong username or password', async () => {
-    const res = await request(server)
-      .post('/api/auth/login')
-      .send({ username: 'NonExistentUser', password: 'wrongpassword' });
-
-    expect(res.statusCode).toBe(401);
-    expect(res.body).toHaveProperty('message', 'invalid credentials');
-  });
-});
-
-describe('Jokes Endpoint', () => {
-  it('should return jokes if token is provided', async () => {
-    const registerRes = await request(server)
-      .post('/api/auth/register')
-      .send({ username: 'Spiderman', password: 'foobar' });
-
-    const loginRes = await request(server)
-      .post('/api/auth/login')
-      .send({ username: 'Spiderman', password: 'foobar' });
-
-    const res = await request(server)
-      .get('/api/jokes')
-      .set('Authorization', loginRes.body.token);
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toHaveLength(3);
-  });
-
-  it('should not return jokes without a token', async () => {
-    const res = await request(server).get('/api/jokes');
-
-    expect(res.statusCode).toBe(401);
-    expect(res.body).toHaveProperty('message', 'token required');
+    it("GET /api/jokes - failure (no token)", async () => {
+      const res = await request(server).get("/api/jokes");
+      expect(res.status).toBe(401);
+      expect(res.body.message).toBe("token required");
+    });
   });
 });

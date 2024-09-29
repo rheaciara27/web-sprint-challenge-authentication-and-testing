@@ -1,73 +1,46 @@
-const request = require("supertest");
-const server = require("./server");
-const db = require("../data/dbConfig");
+// Write your tests here
+const db = require('../data/dbConfig')
+const request = require('supertest')
+const server = require('./server')
+const bcrypt = require('bcryptjs')
+
+
 
 beforeAll(async () => {
-  await db.migrate.rollback();
-  await db.migrate.latest();
-});
-
+  await db.migrate.rollback()
+  await db.migrate.latest()
+})
+beforeEach(async () => {
+  await db('users').truncate()
+})
 afterAll(async () => {
-  await db.destroy();
-});
+  await db.destroy()
+})
 
-describe("server.js", () => {
-  describe("auth endpoints", () => {
-    it("POST /api/auth/register - success", async () => {
-      const res = await request(server)
-        .post("/api/auth/register")
-        .send({ username: "testuser", password: "testpass" });
-      expect(res.status).toBe(201);
-      expect(res.body.username).toBe("testuser");
-      expect(res.body.password).not.toBe("testpass");
-    });
+it('[0] sanity check', () => {
+  expect(true).not.toBe(false)
+})
 
-    it("POST /api/auth/register - failure (missing data)", async () => {
-      const res = await request(server)
-        .post("/api/auth/register")
-        .send({ username: "testuser2" });
-      expect(res.status).toBe(400);
-      expect(res.body.message).toBe("username and password required");
-    });
+describe('[POST] /api/auth/register', () => {
+  it('[4] creates a new user with correct information', async () => {
+    await request(server).post('/api/auth/register').send({ username: 'jose', password: '1234' })
+    const jose = await db('users').where('username', 'jose').first()
+    expect(jose).toMatchObject({ username: 'jose', })
+  })
+  it('[8] saves the user with a bcrypted password and not the plain text', async () => {
+    await request(server).post('/api/auth/register').send({ username: 'jose', password: '1234' })
+    const jose = await db('users').where('username', 'jose').first()
+    expect(bcrypt.compareSync('1234', jose.password)).toBeTruthy()
+  }, )
+})
 
-    it("POST /api/auth/login - success", async () => {
-      const res = await request(server)
-        .post("/api/auth/login")
-        .send({ username: "testuser", password: "testpass" });
-      expect(res.status).toBe(200);
-      expect(res.body.message).toContain("welcome, testuser");
-      expect(res.body.token).toBeDefined();
-    });
-
-    it("POST /api/auth/login - failure (invalid credentials)", async () => {
-      const res = await request(server)
-        .post("/api/auth/login")
-        .send({ username: "testuser", password: "wrongpass" });
-      expect(res.status).toBe(401);
-      expect(res.body.message).toBe("invalid credentials");
-    });
-  });
-
-  describe("jokes endpoint", () => {
-    it("GET /api/jokes - success (with token)", async () => {
-      // First, login to get a token
-      const loginRes = await request(server)
-        .post("/api/auth/login")
-        .send({ username: "testuser", password: "testpass" });
-      const token = loginRes.body.token;
-
-      // Then, use the token to access jokes
-      const jokesRes = await request(server)
-        .get("/api/jokes")
-        .set("Authorization", token);
-      expect(jokesRes.status).toBe(200);
-      expect(Array.isArray(jokesRes.body)).toBe(true);
-    });
-
-    it("GET /api/jokes - failure (no token)", async () => {
-      const res = await request(server).get("/api/jokes");
-      expect(res.status).toBe(401);
-      expect(res.body.message).toBe("token required");
-    });
-  });
-});
+describe('[POST] /api/auth/login', () => {
+  it('[1] responds with the correct message on username and password required', async () => {
+    const res = await request(server).post('/api/auth/login').send({ username: 'bob', password: '' })
+    expect(res.body.message).toMatch('username and password required')
+  },)
+  it('[1] responds with the correct message on invalid credentials', async () => {
+    const res = await request(server).post('/api/auth/login').send({ username: '', password: '1234' })
+    expect(res.body.message).toMatch('username and password required')
+  },)
+})

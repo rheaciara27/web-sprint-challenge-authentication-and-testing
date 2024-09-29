@@ -1,46 +1,65 @@
-// Write your tests here
-const db = require('../data/dbConfig')
-const request = require('supertest')
-const server = require('./server')
-const bcrypt = require('bcryptjs')
+const request = require('supertest');
+const server = require('./server');
 
+test('POST /api/auth/register - successfully registers a new user', async () => {
+  const response = await request(server)
+    .post('/api/auth/register')
+    .send({ username: 'newUser', password: 'password123' });
 
+  expect(response.status).toBe(201);
+  expect(response.body).toHaveProperty('id');
+  expect(response.body).toHaveProperty('username', 'newUser');
+});
 
-beforeAll(async () => {
-  await db.migrate.rollback()
-  await db.migrate.latest()
-})
-beforeEach(async () => {
-  await db('users').truncate()
-})
-afterAll(async () => {
-  await db.destroy()
-})
+test('POST /api/auth/register - fails without username and password', async () => {
+  const response = await request(server)
+    .post('/api/auth/register')
+    .send({ username: '' });
 
-it('[0] sanity check', () => {
-  expect(true).not.toBe(false)
-})
+  expect(response.status).toBe(400);
+  expect(response.body).toHaveProperty('message', 'username and password required');
+});
 
-describe('[POST] /api/auth/register', () => {
-  it('[4] creates a new user with correct information', async () => {
-    await request(server).post('/api/auth/register').send({ username: 'jose', password: '1234' })
-    const jose = await db('users').where('username', 'jose').first()
-    expect(jose).toMatchObject({ username: 'jose', })
-  })
-  it('[8] saves the user with a bcrypted password and not the plain text', async () => {
-    await request(server).post('/api/auth/register').send({ username: 'jose', password: '1234' })
-    const jose = await db('users').where('username', 'jose').first()
-    expect(bcrypt.compareSync('1234', jose.password)).toBeTruthy()
-  }, )
-})
+test('POST /api/auth/login - successfully logs in with valid credentials', async () => {
+  const response = await request(server)
+    .post('/api/auth/login')
+    .send({ username: 'newUser', password: 'password123' });
 
-describe('[POST] /api/auth/login', () => {
-  it('[1] responds with the correct message on username and password required', async () => {
-    const res = await request(server).post('/api/auth/login').send({ username: 'bob', password: '' })
-    expect(res.body.message).toMatch('username and password required')
-  },)
-  it('[1] responds with the correct message on invalid credentials', async () => {
-    const res = await request(server).post('/api/auth/login').send({ username: '', password: '1234' })
-    expect(res.body.message).toMatch('username and password required')
-  },)
-})
+  expect(response.status).toBe(200);
+  expect(response.body).toHaveProperty('message', 'welcome, newUser');
+  expect(response.body).toHaveProperty('token');
+});
+
+test('POST /api/auth/login - fails with invalid credentials', async () => {
+  const response = await request(server)
+    .post('/api/auth/login')
+    .send({ username: 'newUser', password: 'wrongPassword' });
+
+  expect(response.status).toBe(401);
+  expect(response.body).toHaveProperty('message', 'invalid credentials');
+});
+
+test('GET /api/jokes - successfully retrieves jokes with token', async () => {
+  // First log in to get the token
+  const login = await request(server)
+    .post('/api/auth/login')
+    .send({ username: 'newUser', password: 'password123' });
+
+  const token = login.body.token;
+
+  // Use the token to access the jokes route
+  const response = await request(server)
+    .get('/api/jokes')
+    .set('Authorization', token);
+
+  expect(response.status).toBe(200);
+  expect(response.body).toBeInstanceOf(Array); // Assuming jokes are returned in an array
+});
+
+test('GET /api/jokes - fails to retrieve jokes without token', async () => {
+  const response = await request(server)
+    .get('/api/jokes');
+
+  expect(response.status).toBe(401);
+  expect(response.body).toHaveProperty('message', 'token required');
+});
